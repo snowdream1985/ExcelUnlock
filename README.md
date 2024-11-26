@@ -20,7 +20,7 @@ ExcelUnlock 是一个功能强大的命令行工具，用于破解受密码保�
 
 1. 克隆仓库：
 ```bash
-git clone [repository-url]
+git clone https://github.com/houyongsheng/ExcelUnlock.git
 ```
 
 2. 进入项目目录：
@@ -122,7 +122,7 @@ dotnet run -- -f "Excel文件路径.xlsx" -m Mask --mask "?d?d?d?d"
 
 ## 许可证
 
-[添加许可证信息]
+本项目采用 MIT 许可证。查看 [LICENSE](LICENSE) 文件了解更多信息。
 
 ## 贡献指南
 
