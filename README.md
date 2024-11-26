@@ -27,7 +27,7 @@ git clone https://github.com/houyongsheng/ExcelUnlock.git
 
 2. 进入项目目录：
 ```bash
-cd ExcelUnlock
+cd ExcelUnlock-master
 ```
 
 3. 编译项目：
