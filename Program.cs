@@ -43,7 +43,7 @@ class Program
         public long ProcessedCount { get; set; }
         public DateTime StartTime { get; set; }
         public HashSet<string> TriedPasswords { get; set; } = new();
-        
+
         public void Save(string statePath)
         {
             var json = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
@@ -79,10 +79,10 @@ class Program
         public int MaxMemoryMB { get; set; } = 1024;
         public string LogFile { get; set; } = "crack.log";
         public string FilePath { get; set; } = "";
-        
+
         private string? _charset;
-        public string Charset 
-        { 
+        public string Charset
+        {
             get
             {
                 if (_charset == null)
@@ -110,10 +110,10 @@ class Program
         Console.WriteLine("\n基本用法:");
         Console.WriteLine("1. 单个密码模式:");
         Console.WriteLine("   ExcelUnlock <excel文件> -p <密码>");
-        
+
         Console.WriteLine("\n2. 密码字典模式:");
         Console.WriteLine("   ExcelUnlock <excel文件> -f <密码文件>");
-        
+
         Console.WriteLine("\n3. 暴力破解模式:");
         Console.WriteLine("   ExcelUnlock <excel文件> -b [选项]");
         Console.WriteLine("   选项:");
@@ -124,7 +124,7 @@ class Program
         Console.WriteLine("   -C, --uppercase           包含大写字母");
         Console.WriteLine("   -s, --special             包含特殊字符");
         Console.WriteLine("   --custom-charset <文件>    使用自定义字符集");
-        
+
         Console.WriteLine("\n4. 掩码模式:");
         Console.WriteLine("   ExcelUnlock <excel文件> -m <掩码>");
         Console.WriteLine("   掩码规则:");
@@ -136,7 +136,7 @@ class Program
         Console.WriteLine("   ?h = 十六进制字符 (0-9, a-f)");
         Console.WriteLine("   ?1-?9 = 自定义字符集1-9");
         Console.WriteLine("   例如: ?d?d?d?d = 4位数字");
-        
+
         Console.WriteLine("\n通用选项:");
         Console.WriteLine("   --resume                  从上次中断处继续");
         Console.WriteLine("   --save-state             保存破解状态（用于断点续传）");
@@ -277,7 +277,7 @@ class Program
     private static CrackOptions ParseCommandLineArgs(string[] args)
     {
         var options = new CrackOptions();
-        
+
         for (int i = 0; i < args.Length; i++)
         {
             switch (args[i].ToLower())
@@ -292,7 +292,7 @@ class Program
                         }
                     }
                     break;
-                    
+
                 case "-f":
                 case "--file":
                     if (i + 1 < args.Length)
@@ -300,7 +300,7 @@ class Program
                         options.FilePath = args[++i];
                     }
                     break;
-                    
+
                 case "-p":
                 case "--password":
                     if (i + 1 < args.Length)
@@ -308,7 +308,7 @@ class Program
                         options.Password = args[++i];
                     }
                     break;
-                    
+
                 case "-d":
                 case "--dictionary":
                     if (i + 1 < args.Length)
@@ -316,42 +316,42 @@ class Program
                         options.DictionaryPath = args[++i];
                     }
                     break;
-                    
+
                 case "--mask":
                     if (i + 1 < args.Length)
                     {
                         options.Mask = args[++i];
                     }
                     break;
-                    
+
                 case "--min":
                     if (i + 1 < args.Length && int.TryParse(args[++i], out var min))
                     {
                         options.MinLength = min;
                     }
                     break;
-                    
+
                 case "--max":
                     if (i + 1 < args.Length && int.TryParse(args[++i], out var max))
                     {
                         options.MaxLength = max;
                     }
                     break;
-                    
+
                 case "--charset":
                     if (i + 1 < args.Length)
                     {
                         options.Charset = args[++i];
                     }
                     break;
-                    
+
                 case "--resume":
                     if (i + 1 < args.Length && bool.TryParse(args[++i], out var resume))
                     {
                         options.Resume = resume;
                     }
                     break;
-                    
+
                 case "--save-state":
                     if (i + 1 < args.Length && bool.TryParse(args[++i], out var saveState))
                     {
@@ -360,9 +360,13 @@ class Program
                     break;
             }
         }
-        
+
         return options;
     }
+
+    public static object lockobj1 = new object();
+
+    public static object lockobj2 = new object();
 
     private static async Task<(bool found, string password)> TryBruteForce(string filePath, CrackOptions options)
     {
@@ -394,7 +398,7 @@ class Program
         {
             var elapsed = stopwatch.Elapsed.TotalSeconds;
             if (elapsed == 0) return;
-            
+
             var speed = processed / elapsed;
             Console.WriteLine($"当前进度: 已尝试 {processed} 个密码, " +
                             $"速度: {speed:F2} 密码/秒");
@@ -404,27 +408,34 @@ class Program
         for (int length = options.MinLength; length <= options.MaxLength && !found; length++)
         {
             Console.WriteLine($"\n开始尝试 {length} 位密码...");
-            
+
             var currentPasswords = new string[] { string.Empty };
 
             for (int pos = 0; pos < length; pos++)
             {
                 var newPasswords = new ConcurrentBag<string>();
-                
-                await Parallel.ForEachAsync(currentPasswords, 
+
+                await Parallel.ForEachAsync(currentPasswords,
                     new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount },
                     async (current, token) =>
                 {
                     foreach (char c in options.Charset)
                     {
                         var newPassword = current + c;
-                        newPasswords.Add(newPassword);
-                        
+
+                        lock (lockobj1)
+                        {
+                            newPasswords.Add(newPassword);
+                        }
+
                         if (pos == length - 1)
                         {
                             if (!triedPasswords.Contains(newPassword))
                             {
-                                triedPasswords.Add(newPassword);
+                                lock (lockobj2)
+                                {
+                                    triedPasswords.Add(newPassword);
+                                }
                                 var (success, _) = await TryPassword(filePath, newPassword);
                                 if (success)
                                 {
@@ -443,7 +454,7 @@ class Program
             }
 
             if (found) break;
-            
+
             // 定期保存状态
             if (options.SaveState)
             {
@@ -513,7 +524,7 @@ class Program
         {
             var elapsed = stopwatch.Elapsed.TotalSeconds;
             if (elapsed == 0) return;
-            
+
             var speed = processed / elapsed;
             Console.WriteLine($"当前进度: 已尝试 {processed} 个密码, " +
                             $"速度: {speed:F2} 密码/秒");
@@ -532,7 +543,7 @@ class Program
                     'l' => CharacterSets.LowerCase.ToCharArray(),
                     'u' => CharacterSets.UpperCase.ToCharArray(),
                     's' => CharacterSets.Special.ToCharArray(),
-                    'a' => (CharacterSets.Digits + CharacterSets.LowerCase + 
+                    'a' => (CharacterSets.Digits + CharacterSets.LowerCase +
                            CharacterSets.UpperCase + CharacterSets.Special).ToCharArray(),
                     'h' => "0123456789abcdef".ToCharArray(),
                     _ => throw new ArgumentException($"未知的掩码类型: {type}")
@@ -640,7 +651,7 @@ class Program
             {
                 var elapsed = stopwatch.Elapsed.TotalSeconds;
                 if (elapsed == 0) return;
-                
+
                 var speed = processed / elapsed;
                 Console.WriteLine($"当前进度: 已尝试 {processed} 个密码, " +
                                 $"速度: {speed:F2} 密码/秒");
@@ -649,14 +660,14 @@ class Program
             foreach (var password in File.ReadLines(options.DictionaryPath))
             {
                 if (string.IsNullOrWhiteSpace(password)) continue;
-                
+
                 var (success, _) = await TryPassword(filePath, password);
                 if (success)
                 {
                     await progressTimer.DisposeAsync();
                     return (true, password);
                 }
-                
+
                 processed++;
             }
 
@@ -687,7 +698,7 @@ class Program
 
                 // 输出文件头部信息用于调试
                 Console.WriteLine($"文件头部: {BitConverter.ToString(header)}");
-                
+
                 // 检查是否是OLE2格式 (D0-CF-11-E0-A1-B1-1A-E1)
                 if (header[0] == 0xD0 && header[1] == 0xCF && header[2] == 0x11 && header[3] == 0xE0)
                 {
@@ -703,7 +714,7 @@ class Program
             {
                 Console.WriteLine("尝试验证密码...");
                 var fs = new POIFSFileSystem(stream);
-                
+
                 // 检查是否有加密信息
                 if (!fs.Root.HasEntry("EncryptionInfo"))
                 {
@@ -715,10 +726,10 @@ class Program
                 {
                     var info = new EncryptionInfo(fs);
                     Console.WriteLine($"加密类型: {info.VersionMajor}.{info.VersionMinor}");
-                    
+
                     var decryptor = Decryptor.GetInstance(info);
                     bool valid = decryptor.VerifyPassword(password);
-                    
+
                     if (valid)
                     {
                         using var document = decryptor.GetDataStream(fs);
@@ -767,7 +778,7 @@ class Program
         {
             return (false, $"处理文件时出错: {ex.Message}");
         }
-        
+
         return (false, "未知错误");  // 确保所有路径都有返回值
     }
 
@@ -776,7 +787,7 @@ class Program
         try
         {
             Console.WriteLine("正在解密文件...");
-            
+
             // 读取原始文件
             byte[] bytes = await File.ReadAllBytesAsync(filePath);
             using var stream = new MemoryStream(bytes);
@@ -786,7 +797,7 @@ class Program
             // 获取加密信息
             var info = new EncryptionInfo(fs);
             var decryptor = Decryptor.GetInstance(info);
-            
+
             if (!decryptor.VerifyPassword(password))
             {
                 Console.WriteLine("错误：密码验证失败，无法解密文件");
